@@ -2543,6 +2543,402 @@ document.getElementById('reservoir-settings-modal').addEventListener('click',fun
   lh.addEventListener('mousedown',function(e){initR(e,'left');});
   rh.addEventListener('mousedown',function(e){initR(e,'right');});
 })();
+
+// ============================================================
+// TAB MODALS – Analytics, Reports, Alarm History, Efficiency,
+//              Production History, Pressure Loggers, Preventive Maintenance
+// ============================================================
+var tabModalChart = null;
+var tabModalCurrentDevice = null;
+var tabModalCurrentMode = 'daily'; // 'daily' | 'monthly'
+var tabModalCurrentTab = null;
+var tabModalAllRows = [];
+
+var TAB_CONFIGS = {
+  'analytics': {
+    title: '📊 Analytics',
+    icon: '📊',
+    color: '#0055cc',
+    params: [
+      {key:'pressure', label:'Pressure (psi)', color:'rgba(29,78,216,0.85)', bg:'rgba(29,78,216,0.12)', pattern:/pressure|psi/i},
+      {key:'flowrate', label:'Flowrate (L/s)', color:'rgba(14,165,233,0.85)', bg:'rgba(14,165,233,0.12)', pattern:/flowrate|flow/i},
+      {key:'voltage',  label:'Voltage (V)',    color:'rgba(34,197,94,0.85)',  bg:'rgba(34,197,94,0.12)',  pattern:/voltage/i},
+      {key:'current',  label:'Current (A)',    color:'rgba(244,63,94,0.85)',  bg:'rgba(244,63,94,0.12)',  pattern:/current/i}
+    ],
+    chartType: 'line',
+    yLabel: 'Value'
+  },
+  'reports': {
+    title: '📋 Reports',
+    icon: '📋',
+    color: '#0b7c9c',
+    params: [
+      {key:'energy',    label:'Energy (kWh)',    color:'rgba(167,139,250,0.85)', bg:'rgba(167,139,250,0.12)', pattern:/energy/i},
+      {key:'power',     label:'Power (W)',       color:'rgba(249,115,22,0.85)',  bg:'rgba(249,115,22,0.12)',  pattern:/^power/i},
+      {key:'discharge', label:'Discharge (m³)',  color:'rgba(139,92,246,0.85)',  bg:'rgba(139,92,246,0.12)',  pattern:/discharge|total/i}
+    ],
+    chartType: 'bar',
+    yLabel: 'Energy / Power / Discharge'
+  },
+  'alarm': {
+    title: '🔔 Alarm History',
+    icon: '🔔',
+    color: '#dc2626',
+    params: [
+      {key:'pressure', label:'Pressure (psi)', color:'rgba(239,68,68,0.85)', bg:'rgba(239,68,68,0.12)', pattern:/pressure|psi/i},
+      {key:'relay',    label:'Relay State',    color:'rgba(100,116,139,0.85)',bg:'rgba(100,116,139,0.12)',pattern:/^relay$/i}
+    ],
+    chartType: 'line',
+    yLabel: 'Pressure (psi)',
+    alarmMode: true
+  },
+  'Pump/Motor Efficiency': {
+    title: '🔧 Pump/Motor Efficiency',
+    icon: '🔧',
+    color: '#b45309',
+    params: [
+      {key:'pumpeff', label:'Efficiency (%)', color:'rgba(245,158,11,0.85)', bg:'rgba(245,158,11,0.12)', computed: true}
+    ],
+    chartType: 'line',
+    yLabel: 'Efficiency (%)'
+  },
+  'prod-history': {
+    title: '📈 Production History',
+    icon: '📈',
+    color: '#065f46',
+    params: [
+      {key:'discharge', label:'Total Discharge (m³)', color:'rgba(139,92,246,0.85)', bg:'rgba(139,92,246,0.12)', pattern:/discharge|total/i},
+      {key:'flowrate',  label:'Flowrate (L/s)',       color:'rgba(14,165,233,0.85)',  bg:'rgba(14,165,233,0.12)',  pattern:/flowrate|flow/i}
+    ],
+    chartType: 'bar',
+    yLabel: 'Discharge / Flow'
+  },
+  'pressure-logger': {
+    title: '📟 Pressure Loggers',
+    icon: '📟',
+    color: '#1d4ed8',
+    params: [
+      {key:'pressure', label:'Pressure (psi)', color:'rgba(29,78,216,0.85)', bg:'rgba(29,78,216,0.12)', pattern:/pressure|psi/i}
+    ],
+    chartType: 'line',
+    yLabel: 'Pressure (psi)'
+  },
+  'preventive-maintenance': {
+    title: '🛠️ Preventive Maintenance',
+    icon: '🛠️',
+    color: '#7c3aed',
+    params: [
+      {key:'voltage', label:'Voltage (V)',  color:'rgba(34,197,94,0.85)',  bg:'rgba(34,197,94,0.12)',  pattern:/voltage/i},
+      {key:'current', label:'Current (A)',  color:'rgba(244,63,94,0.85)',  bg:'rgba(244,63,94,0.12)',  pattern:/current/i},
+      {key:'power',   label:'Power (W)',    color:'rgba(249,115,22,0.85)', bg:'rgba(249,115,22,0.12)', pattern:/^power/i}
+    ],
+    chartType: 'bar',
+    yLabel: 'Voltage / Current / Power'
+  }
+};
+
+function openTabModal(tabKey) {
+  var cfg = TAB_CONFIGS[tabKey];
+  if (!cfg) return;
+  tabModalCurrentTab = tabKey;
+  tabModalCurrentMode = 'daily';
+  tabModalCurrentDevice = null;
+  tabModalAllRows = [];
+
+  // Remove existing
+  var old = document.getElementById('tab-modal-overlay');
+  if (old) old.remove();
+  if (tabModalChart) { tabModalChart.destroy(); tabModalChart = null; }
+
+  var overlay = document.createElement('div');
+  overlay.id = 'tab-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,10,30,0.72);z-index:5500;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML =
+    '<div style="background:#fff;border-radius:18px;width:820px;max-width:96vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,0.45);">'
+    // Header
+    + '<div style="background:linear-gradient(135deg,'+cfg.color+','+cfg.color+'cc);padding:18px 22px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
+    +   '<div>'
+    +     '<div style="color:#fff;font-weight:800;font-size:1.15rem;font-family:\'Syne\',sans-serif;">'+cfg.title+'</div>'
+    +     '<div style="color:rgba(255,255,255,0.72);font-size:12px;margin-top:2px;">Pumping Station Data &mdash; select a station and period below</div>'
+    +   '</div>'
+    +   '<button onclick="closeTabModal()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">&#10005;</button>'
+    + '</div>'
+    // Controls bar
+    + '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 22px 10px;border-bottom:1px solid #e5eef9;background:#f8fbff;flex-shrink:0;">'
+    +   '<div style="display:flex;align-items:center;gap:6px;">'
+    +     '<label style="font-size:12px;font-weight:700;color:#5575a0;">Station:</label>'
+    +     '<select id="tab-modal-device-select" onchange="onTabModalDeviceChange()" style="padding:6px 10px;border:1.5px solid #d0e4f7;border-radius:8px;font-size:13px;color:#002b5c;background:#fff;outline:none;min-width:200px;">'
+    +       '<option value="">-- Loading... --</option>'
+    +     '</select>'
+    +   '</div>'
+    +   '<div id="tab-modal-mode-btns" style="display:flex;gap:4px;margin-left:4px;">'
+    +     '<button id="tab-mode-daily"   onclick="setTabModalMode(\'daily\')"   style="padding:5px 14px;border:1.5px solid '+cfg.color+';border-radius:7px;background:'+cfg.color+';color:#fff;font-size:12px;font-weight:700;cursor:pointer;">Daily</button>'
+    +     '<button id="tab-mode-monthly" onclick="setTabModalMode(\'monthly\')" style="padding:5px 14px;border:1.5px solid '+cfg.color+';border-radius:7px;background:#fff;color:'+cfg.color+';font-size:12px;font-weight:700;cursor:pointer;">Monthly</button>'
+    +   '</div>'
+    +   '<div id="tab-modal-stat-chips" style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;"></div>'
+    + '</div>'
+    // Chart area
+    + '<div style="flex:1;overflow-y:auto;padding:16px 22px 18px;">'
+    +   '<div id="tab-modal-loading" style="text-align:center;padding:50px 0;color:#7a8fa6;display:flex;flex-direction:column;align-items:center;gap:10px;">'
+    +     '<div class="spinner"></div><span>Loading pumping stations…</span>'
+    +   '</div>'
+    +   '<div id="tab-modal-chart-area" style="display:none;position:relative;height:320px;">'
+    +     '<canvas id="tab-modal-canvas"></canvas>'
+    +   '</div>'
+    +   '<div id="tab-modal-summary-cards" style="display:none;margin-top:14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;"></div>'
+    + '</div>'
+    + '</div>';
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) closeTabModal(); });
+
+  // Populate device dropdown
+  apiGet('getDashboardData').then(function(devices) {
+    var pumps = devices.filter(function(d) {
+      var n = (d.device||'').toLowerCase();
+      return n.includes('pumping station');
+    });
+    var sel = document.getElementById('tab-modal-device-select');
+    if (!sel) return;
+    if (!pumps.length) {
+      sel.innerHTML = '<option value="">No pumping stations found</option>';
+      document.getElementById('tab-modal-loading').innerHTML = '<span style="color:#e05555;">No pumping station devices found.</span>';
+      return;
+    }
+    sel.innerHTML = pumps.map(function(d,i){
+      return '<option value="'+d.device.replace(/"/g,'&quot;')+'"'+(i===0?' selected':'')+'>'+d.device+'</option>';
+    }).join('');
+    tabModalCurrentDevice = pumps[0].device;
+    loadTabModalData();
+  }).catch(function(e) {
+    var load = document.getElementById('tab-modal-loading');
+    if (load) load.innerHTML = '<span style="color:#e05555;">Error loading devices: '+e.message+'</span>';
+  });
+}
+
+function closeTabModal() {
+  var o = document.getElementById('tab-modal-overlay');
+  if (o) o.remove();
+  if (tabModalChart) { tabModalChart.destroy(); tabModalChart = null; }
+}
+
+function onTabModalDeviceChange() {
+  var sel = document.getElementById('tab-modal-device-select');
+  if (sel) { tabModalCurrentDevice = sel.value; loadTabModalData(); }
+}
+
+function setTabModalMode(mode) {
+  tabModalCurrentMode = mode;
+  var cfg = TAB_CONFIGS[tabModalCurrentTab];
+  if (!cfg) return;
+  var btnD = document.getElementById('tab-mode-daily');
+  var btnM = document.getElementById('tab-mode-monthly');
+  if (btnD && btnM) {
+    if (mode === 'daily') {
+      btnD.style.background = cfg.color; btnD.style.color = '#fff';
+      btnM.style.background = '#fff'; btnM.style.color = cfg.color;
+    } else {
+      btnM.style.background = cfg.color; btnM.style.color = '#fff';
+      btnD.style.background = '#fff'; btnD.style.color = cfg.color;
+    }
+  }
+  if (tabModalAllRows.length) renderTabModalChart(tabModalAllRows);
+}
+
+function loadTabModalData() {
+  if (!tabModalCurrentDevice) return;
+  var load = document.getElementById('tab-modal-loading');
+  var chartArea = document.getElementById('tab-modal-chart-area');
+  if (load) { load.style.display = 'flex'; load.style.flexDirection='column'; load.style.alignItems='center'; load.innerHTML = '<div class="spinner"></div><span style="color:#7a8fa6;margin-top:8px;">Loading data for '+tabModalCurrentDevice+'…</span>'; }
+  if (chartArea) chartArea.style.display = 'none';
+  if (tabModalChart) { tabModalChart.destroy(); tabModalChart = null; }
+
+  apiGet('getSheetData', { sheet: tabModalCurrentDevice }).then(function(rows) {
+    tabModalAllRows = rows || [];
+    if (load) load.style.display = 'none';
+    if (chartArea) chartArea.style.display = 'block';
+    renderTabModalChart(tabModalAllRows);
+  }).catch(function(e) {
+    if (load) { load.style.display = 'flex'; load.innerHTML = '<span style="color:#e05555;">Could not load data: '+e.message+'</span>'; }
+  });
+}
+
+function renderTabModalChart(rows) {
+  var cfg = TAB_CONFIGS[tabModalCurrentTab];
+  if (!cfg || !rows.length) return;
+
+  // Detect column keys from first row
+  var keys = Object.keys(rows[0]);
+  var timeKey = keys.find(function(k){return /time|date|timestamp/i.test(k);})||keys[0];
+
+  function resolveKey(p) {
+    if (p.computed && p.key === 'pumpeff') return '__pumpeff__';
+    if (!p.pattern) return null;
+    return keys.find(function(k){ return p.pattern.test(k); }) || null;
+  }
+
+  // Aggregate by mode
+  var buckets = {};
+  rows.forEach(function(r) {
+    var ts = parseSheetDate(r[timeKey]);
+    if (!ts || isNaN(ts.getTime())) return;
+    var bucketKey;
+    if (tabModalCurrentMode === 'monthly') {
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      bucketKey = months[ts.getMonth()] + ' ' + ts.getFullYear();
+    } else {
+      var d = ts, dd = ('0'+(d.getDate())).slice(-2), mm = ('0'+(d.getMonth()+1)).slice(-2);
+      bucketKey = mm + '/' + dd + '/' + d.getFullYear();
+    }
+    if (!buckets[bucketKey]) buckets[bucketKey] = { count: 0, sums: {}, maxes: {}, alarmCount: 0 };
+    var b = buckets[bucketKey];
+    b.count++;
+
+    cfg.params.forEach(function(p) {
+      var ck = resolveKey(p);
+      var val;
+      if (p.key === 'pumpeff') {
+        var fl = parseFloat(r[keys.find(function(k){return /flowrate|flow/i.test(k);})||''] || 0);
+        var pr = parseFloat(r[keys.find(function(k){return /pressure|psi/i.test(k);})||''] || 0);
+        var pw = parseFloat(r[keys.find(function(k){return /^power/i.test(k);})||''] || 0);
+        if (fl>0&&pr>0&&pw>0) { val = Math.min(100,(fl*pr*0.00689476)/(pw/1000)*100); }
+      } else if (ck) {
+        val = parseFloat(r[ck]);
+      }
+      if (!isNaN(val) && val !== undefined) {
+        if (!b.sums[p.key]) b.sums[p.key] = 0;
+        b.sums[p.key] += val;
+        if (!b.maxes[p.key] || val > b.maxes[p.key]) b.maxes[p.key] = val;
+      }
+    });
+
+    // alarm count for alarm history tab
+    if (cfg.alarmMode) {
+      var presKey = resolveKey(cfg.params[0]);
+      var presVal = presKey ? parseFloat(r[presKey]) : NaN;
+      var ps = pressureSettingsCache[tabModalCurrentDevice] || {minPsi:20, maxPsi:80};
+      if (!isNaN(presVal) && (presVal < ps.minPsi || presVal > ps.maxPsi)) b.alarmCount++;
+    }
+  });
+
+  // Sort bucket keys
+  var sortedLabels = Object.keys(buckets).sort(function(a,b) {
+    if (tabModalCurrentMode==='monthly') {
+      var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var pa=a.split(' '), pb=b.split(' ');
+      var ya=parseInt(pa[1]),yb=parseInt(pb[1]);
+      if (ya!==yb) return ya-yb;
+      return months.indexOf(pa[0])-months.indexOf(pb[0]);
+    }
+    return new Date(a)-new Date(b);
+  });
+
+  // Show only last N labels
+  var maxLabels = tabModalCurrentMode==='monthly'?18:30;
+  if (sortedLabels.length > maxLabels) sortedLabels = sortedLabels.slice(-maxLabels);
+
+  // Build datasets
+  var datasets = cfg.params.map(function(p) {
+    var data = sortedLabels.map(function(lbl) {
+      var b = buckets[lbl];
+      if (!b || !b.sums[p.key]) return null;
+      var avg = b.sums[p.key] / b.count;
+      return Math.round(avg * 100) / 100;
+    });
+    return {
+      label: p.label,
+      data: data,
+      borderColor: p.color,
+      backgroundColor: cfg.chartType==='bar' ? p.color : p.bg,
+      fill: cfg.chartType!=='bar',
+      tension: 0.35,
+      pointRadius: tabModalCurrentMode==='monthly'?4:2,
+      pointHoverRadius: 6,
+      borderWidth: cfg.chartType==='bar'?0:2,
+      borderRadius: cfg.chartType==='bar'?5:0,
+      spanGaps: true
+    };
+  });
+
+  // Alarm overlay dataset
+  if (cfg.alarmMode) {
+    var alarmData = sortedLabels.map(function(lbl) {
+      return buckets[lbl] ? buckets[lbl].alarmCount : 0;
+    });
+    datasets.push({
+      label: '⚠️ Alarm Events',
+      data: alarmData,
+      type: 'bar',
+      backgroundColor: 'rgba(239,68,68,0.35)',
+      borderColor: 'rgba(239,68,68,0.7)',
+      borderWidth: 1,
+      borderRadius: 3,
+      yAxisID: 'yRight'
+    });
+  }
+
+  // Destroy old chart
+  if (tabModalChart) { tabModalChart.destroy(); tabModalChart = null; }
+  var canvas = document.getElementById('tab-modal-canvas');
+  if (!canvas) return;
+
+  var summaryCards = document.getElementById('tab-modal-summary-cards');
+
+  tabModalChart = new Chart(canvas.getContext('2d'), {
+    type: cfg.chartType,
+    data: { labels: sortedLabels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11 }, boxWidth: 14, padding: 12 } },
+        tooltip: { callbacks: {
+          title: function(items) { return items[0].label; }
+        }}
+      },
+      scales: {
+        x: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 30, maxTicksLimit: 20 } },
+        y: { grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { font: { size: 11 } }, title: { display: true, text: cfg.yLabel, font: { size: 11 }, color: '#5575a0' } },
+        yRight: cfg.alarmMode ? { position: 'right', grid: { drawOnChartArea: false }, ticks: { font:{size:10} }, title: { display:true, text:'Alarms', font:{size:10}, color:'#ef4444' } } : undefined
+      }
+    }
+  });
+
+  // Summary stat chips
+  if (summaryCards) {
+    summaryCards.style.display = 'grid';
+    var chips = '';
+    cfg.params.forEach(function(p) {
+      var vals = sortedLabels.map(function(lbl){ var b=buckets[lbl]; return (b&&b.sums[p.key])?(b.sums[p.key]/b.count):null; }).filter(function(v){return v!==null;});
+      if (!vals.length) return;
+      var avg = vals.reduce(function(a,b){return a+b;},0)/vals.length;
+      var mx = Math.max.apply(null,vals);
+      var mn = Math.min.apply(null,vals);
+      var pc = p.color.replace(/[\d.]+\)$/,'1)');
+      chips += '<div style="background:'+p.bg.replace(/[\d.]+\)$/,'0.25)')+';border:1.5px solid '+pc+';border-radius:10px;padding:10px 14px;">'
+        + '<div style="font-size:10px;font-weight:800;color:#5575a0;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:4px;">'+p.label+'</div>'
+        + '<div style="font-size:16px;font-weight:800;color:'+pc+';">Avg: '+avg.toFixed(1)+'</div>'
+        + '<div style="font-size:11px;color:#7a8fa6;margin-top:2px;">Max: '+mx.toFixed(1)+' &nbsp;|&nbsp; Min: '+mn.toFixed(1)+'</div>'
+        + '</div>';
+    });
+    summaryCards.innerHTML = chips || '<span style="color:#7a8fa6;font-size:13px;">No numeric data available for this period.</span>';
+  }
+}
+
+// Wire up all unhandled top-card tabs
+(function wireTabCards() {
+  var tabsToHandle = Object.keys(TAB_CONFIGS);
+  document.querySelectorAll('.top-card[data-tab]').forEach(function(card) {
+    var tab = card.dataset.tab;
+    if (tabsToHandle.indexOf(tab) !== -1) {
+      card.addEventListener('click', function(e) {
+        e.stopPropagation();
+        openTabModal(tab);
+      });
+    }
+  });
+})();
 </script>
 
 <!-- ========== AI CHAT ASSISTANT PANEL ========== -->
