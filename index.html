@@ -1018,6 +1018,134 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (max-width: 700px) { .ai-msg { max-width: 95%; } #ai-chat-panel { width: calc(100vw - 32px); right: 16px; bottom: 16px; } }
 
+  /* ══════════════════════════════════════════════════════════════
+     PERFORMANCE & SMOOTHNESS UPGRADES
+     ══════════════════════════════════════════════════════════════ */
+
+  /* ── GPU compositing layer promotion ── */
+  .top-card,
+  .device-list li,
+  #sheet-overlay,
+  #device-details,
+  #graph-modal-inner,
+  #pressure-settings-inner,
+  #reservoir-settings-inner,
+  #tab-modal-overlay > div,
+  .toast {
+    will-change: transform;
+    transform: translateZ(0);        /* force own compositing layer */
+    backface-visibility: hidden;
+  }
+
+  /* ── Precise transitions — only composite-safe properties ── */
+  .top-card {
+    transition: transform 0.18s cubic-bezier(0.34,1.4,0.64,1),
+                box-shadow 0.18s ease,
+                background-color 0.18s ease;
+  }
+  .top-card:hover  { transform: translateY(-4px) translateZ(0); }
+  .top-card:active { transform: scale(0.93) translateZ(0); transition-duration: 0.08s; }
+
+  .device-list li {
+    transition: transform 0.16s cubic-bezier(0.34,1.4,0.64,1),
+                box-shadow 0.16s ease,
+                background-color 0.16s ease;
+    contain: layout style;           /* isolate reflow from siblings */
+  }
+  .device-list li:hover  { transform: translateX(3px) translateZ(0); }
+  .device-list li:active { transform: scale(0.97) translateZ(0); background:rgba(255,255,255,0.35) !important; transition-duration: 0.06s; }
+
+  /* ── Prevent scroll bleed on all scrollable containers ── */
+  .device-list-scroll,
+  .sheet-body,
+  #graph-modal-inner,
+  #tab-modal-overlay > div,
+  #pl-cards-area,
+  #ai-chat-messages {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Touch-action on drag handles so browser doesn't eat the gesture ── */
+  .sheet-header,
+  .resize-handle {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ── cursor: grabbing during active drag (set via JS class) ── */
+  body.dragging,
+  body.dragging * { cursor: grabbing !important; }
+
+  /* ── Device details popup — smooth slide-in ── */
+  #device-details {
+    transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.34,1.3,0.64,1);
+    transform-origin: top center;
+  }
+  #device-details.dd-hidden  { opacity: 0; transform: translateY(-8px) scale(0.97) translateZ(0); pointer-events: none; }
+  #device-details.dd-visible { opacity: 1; transform: translateY(0)    scale(1)    translateZ(0); pointer-events: auto; }
+
+  /* ── Modal overlay — fade + scale entrance ── */
+  #graph-modal { transition: opacity 0.22s ease; }
+  #graph-modal.modal-open  { opacity: 1; }
+  #graph-modal.modal-close { opacity: 0; }
+  #graph-modal-inner {
+    animation: modal-pop 0.28s cubic-bezier(0.34,1.4,0.64,1) both;
+  }
+  @keyframes modal-pop {
+    from { transform: scale(0.93) translateY(16px) translateZ(0); opacity: 0; }
+    to   { transform: scale(1)    translateY(0)    translateZ(0); opacity: 1; }
+  }
+
+  /* ── Button ripple — instant tactile press feedback ── */
+  .top-card svg,
+  .filter-pill,
+  .range-btn,
+  .param-pill,
+  #graph-download-btn,
+  #ps-save-btn, #rs-save-btn,
+  .param-action-btn {
+    position: relative;
+    overflow: hidden;
+  }
+  .ripple-circle {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.45);
+    transform: scale(0);
+    animation: ripple-anim 0.45s linear;
+    pointer-events: none;
+  }
+  @keyframes ripple-anim {
+    to { transform: scale(4); opacity: 0; }
+  }
+
+  /* ── Filter pills — smooth active transition ── */
+  .filter-pill {
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    contain: layout style;
+  }
+  .filter-pill:active { transform: scale(0.94) translateZ(0); }
+
+  /* ── Toast warning variant (was missing) ── */
+  .toast.warning { background: linear-gradient(135deg, #b45309, #f59e0b); }
+
+  /* ── Scrollbar polish for desktop panels ── */
+  .device-list-scroll::-webkit-scrollbar,
+  .sheet-body::-webkit-scrollbar          { width: 4px; }
+  .device-list-scroll::-webkit-scrollbar-track,
+  .sheet-body::-webkit-scrollbar-track    { background: transparent; }
+  .device-list-scroll::-webkit-scrollbar-thumb,
+  .sheet-body::-webkit-scrollbar-thumb    { background: rgba(0,64,128,0.18); border-radius: 4px; }
+  .device-list-scroll::-webkit-scrollbar-thumb:hover,
+  .sheet-body::-webkit-scrollbar-thumb:hover { background: rgba(0,64,128,0.35); }
+
+  /* ── Smooth scroll on every scrollable panel ── */
+  .device-list-scroll,
+  .sheet-body,
+  #pl-cards-area { scroll-behavior: smooth; }
+
   </style>
 </head>
 <body>
@@ -3083,14 +3211,28 @@ document.getElementById('reservoir-settings-modal').addEventListener('click',fun
   var panel=document.getElementById('sheet-overlay'),lh=panel.querySelector('.resize-handle.left'),rh=panel.querySelector('.resize-handle.right'),header=panel.querySelector('.sheet-header');
   if(!panel||!lh||!rh||!header)return;
   var minW=300,isDrag=false,isResize=false,edge=null,startX=0,startLeft=0,startW=0,ox=0,oy=0;
-  header.style.cursor='move';
-  header.addEventListener('mousedown',function(e){if(isResize)return;isDrag=true;var r=panel.getBoundingClientRect();ox=e.clientX-r.left;oy=e.clientY-r.top;document.addEventListener('mousemove',drag);document.addEventListener('mouseup',stop);});
-  function drag(e){if(!isDrag)return;panel.style.left=Math.max(0,Math.min(e.clientX-ox,window.innerWidth-panel.offsetWidth))+'px';panel.style.top=Math.max(0,Math.min(e.clientY-oy,window.innerHeight-panel.offsetHeight))+'px';panel.style.right='auto';}
-  function initR(e,ed){e.preventDefault();isResize=true;edge=ed;startX=e.clientX;startW=panel.offsetWidth;startLeft=panel.getBoundingClientRect().left;document.addEventListener('mousemove',resize);document.addEventListener('mouseup',stop);}
-  function resize(e){if(!isResize)return;var dx=e.clientX-startX,mw=window.innerWidth-50;if(edge==='left'){panel.style.width=Math.min(mw,Math.max(minW,startW-dx))+'px';panel.style.left=(startLeft+dx)+'px';panel.style.right='auto';}else{panel.style.width=Math.min(mw,Math.max(minW,startW+dx))+'px';panel.style.right='auto';}}
-  function stop(){isDrag=isResize=false;edge=null;document.removeEventListener('mousemove',drag);document.removeEventListener('mousemove',resize);document.removeEventListener('mouseup',stop);}
-  lh.addEventListener('mousedown',function(e){initR(e,'left');});
-  rh.addEventListener('mousedown',function(e){initR(e,'right');});
+  var _rafId=null,_pendingX=0,_pendingY=0,_pendingDX=0;
+
+  header.style.cursor='grab';
+
+  function getXY(e){ return e.touches ? {x:e.touches[0].clientX,y:e.touches[0].clientY} : {x:e.clientX,y:e.clientY}; }
+
+  // ── Drag ──────────────────────────────────────────────────────
+  function startDrag(e){ if(isResize)return; isDrag=true; var p=getXY(e),r=panel.getBoundingClientRect(); ox=p.x-r.left; oy=p.y-r.top; header.style.cursor='grabbing'; document.body.classList.add('dragging'); document.addEventListener('mousemove',onDragMove); document.addEventListener('touchmove',onDragMove,{passive:false}); document.addEventListener('mouseup',stop); document.addEventListener('touchend',stop); }
+  function onDragMove(e){ if(!isDrag)return; e.preventDefault(); var p=getXY(e); _pendingX=p.x; _pendingY=p.y; if(!_rafId)_rafId=requestAnimationFrame(applyDrag); }
+  function applyDrag(){ _rafId=null; if(!isDrag)return; panel.style.left=Math.max(0,Math.min(_pendingX-ox,window.innerWidth-panel.offsetWidth))+'px'; panel.style.top=Math.max(0,Math.min(_pendingY-oy,window.innerHeight-panel.offsetHeight))+'px'; panel.style.right='auto'; }
+
+  // ── Resize ────────────────────────────────────────────────────
+  function initR(e,ed){ e.preventDefault(); isResize=true; edge=ed; var p=getXY(e); startX=p.x; startW=panel.offsetWidth; startLeft=panel.getBoundingClientRect().left; document.addEventListener('mousemove',onResizeMove); document.addEventListener('touchmove',onResizeMove,{passive:false}); document.addEventListener('mouseup',stop); document.addEventListener('touchend',stop); }
+  function onResizeMove(e){ if(!isResize)return; e.preventDefault(); var p=getXY(e); _pendingDX=p.x-startX; if(!_rafId)_rafId=requestAnimationFrame(applyResize); }
+  function applyResize(){ _rafId=null; if(!isResize)return; var mw=window.innerWidth-50; if(edge==='left'){panel.style.width=Math.min(mw,Math.max(minW,startW-_pendingDX))+'px';panel.style.left=(startLeft+_pendingDX)+'px';panel.style.right='auto';}else{panel.style.width=Math.min(mw,Math.max(minW,startW+_pendingDX))+'px';panel.style.right='auto';} }
+
+  function stop(){ if(_rafId){cancelAnimationFrame(_rafId);_rafId=null;} isDrag=isResize=false; edge=null; header.style.cursor='grab'; document.body.classList.remove('dragging'); document.removeEventListener('mousemove',onDragMove); document.removeEventListener('touchmove',onDragMove); document.removeEventListener('mousemove',onResizeMove); document.removeEventListener('touchmove',onResizeMove); document.removeEventListener('mouseup',stop); document.removeEventListener('touchend',stop); }
+
+  header.addEventListener('mousedown',startDrag);
+  header.addEventListener('touchstart',startDrag,{passive:false});
+  lh.addEventListener('mousedown',function(e){initR(e,'left');}); lh.addEventListener('touchstart',function(e){initR(e,'left');},{passive:false});
+  rh.addEventListener('mousedown',function(e){initR(e,'right');}); rh.addEventListener('touchstart',function(e){initR(e,'right');},{passive:false});
 })();
 
 // ============================================================
