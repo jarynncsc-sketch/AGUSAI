@@ -736,68 +736,64 @@
     body{margin:0;font-family:'Consolas','Courier New',monospace;height:100vh;overflow:hidden;background:#000;}
     #bg-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;}
     #dashboard{display:none;flex-direction:row;gap:1rem;padding:1rem;height:100vh;overflow:hidden;position:relative;z-index:5;color:#000;}
-    /* ══ NAV LAUNCHER + VERTICAL DRAWER ════════════════════════════════ */
-    #nav-launcher {
+    /* ══ PERMANENT 2-CARD NAV + OPS HUB SUBMENU ═════════════════════ */
+
+    /* Outer wrapper — always visible, column layout */
+    #top-menu-bar {
       position: absolute;
       top: 14px;
       left: 14px;
       z-index: 1100;
-      width: 40px; height: 40px;
-      background: white;
-      border-radius: 10px;
-      box-shadow: 0 3px 12px rgba(0,64,128,0.22);
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      color: #004080;
-      transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
-      will-change: transform;
-      flex-shrink: 0;
-    }
-    #nav-launcher:hover {
-      background: #e3f0ff;
-      transform: scale(1.08);
-      box-shadow: 0 5px 18px rgba(0,64,128,0.3);
-    }
-    #nav-launcher:active { transform: scale(0.94); }
-
-    #top-menu-bar {
-      position: absolute;
-      top: 10px;
-      left: 14px;
-      z-index: 1000;
       display: flex;
       flex-direction: column;
       gap: 6px;
-      padding-top: 52px;          /* clear the launcher */
-      /* hidden by default */
+      pointer-events: auto;
+    }
+
+    /* Operations Hub: relative so submenu can anchor */
+    #ops-hub-wrapper {
+      position: relative;
+    }
+
+    /* Submenu: vertical list below the Ops Hub card */
+    #ops-submenu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      z-index: 1200;
+      visibility: hidden;
       opacity: 0;
-      pointer-events: none;
-      transform: translateX(-18px);
-      transition: opacity 0.22s ease, transform 0.25s cubic-bezier(0.34,1.3,0.64,1);
-      max-height: calc(100vh - 80px);
+      transform: translateY(-10px);
+      transition: visibility 0s 0.2s, opacity 0.2s ease, transform 0.22s cubic-bezier(0.34,1.3,0.64,1);
+      max-height: calc(100vh - 120px);
       overflow-y: auto;
       overflow-x: visible;
       scrollbar-width: none;
       padding-bottom: 8px;
+      padding-right: 4px;
     }
-    #top-menu-bar::-webkit-scrollbar { display: none; }
+    #ops-submenu::-webkit-scrollbar { display: none; }
 
-    /* Show when launcher is hovered OR menu bar itself is hovered */
-    #nav-launcher:hover ~ #top-menu-bar,
-    #top-menu-bar:hover {
+    /* Show submenu on hover or .ops-open class */
+    #ops-hub-wrapper:hover #ops-submenu,
+    #ops-hub-wrapper.ops-open #ops-submenu {
+      visibility: visible;
       opacity: 1;
-      pointer-events: auto;
-      transform: translateX(0);
+      transform: translateY(0);
+      transition: visibility 0s, opacity 0.22s ease, transform 0.25s cubic-bezier(0.34,1.3,0.64,1);
     }
 
-    /* Staggered slide-in for each card */
+    /* Permanent cards — always fully visible */
     .top-card {
       display: flex;
       flex-direction: row;
       align-items: center;
       gap: 9px;
-      width: 150px;
-      padding: 7px 12px;
+      width: 155px;
+      padding: 8px 13px;
       border-radius: 10px;
       background: white;
       cursor: pointer;
@@ -806,8 +802,8 @@
       color: #004080;
       position: relative;
       white-space: nowrap;
-      opacity: 0;
-      transform: translateX(-12px);
+      opacity: 1;
+      transform: translateX(0);
       transition:
         opacity 0.2s ease,
         transform 0.22s cubic-bezier(0.34,1.3,0.64,1),
@@ -815,48 +811,76 @@
         box-shadow 0.15s ease;
       will-change: transform, opacity;
     }
-    /* Stagger each card when drawer is visible */
-    #nav-launcher:hover ~ #top-menu-bar .top-card,
-    #top-menu-bar:hover .top-card {
+
+    /* Submenu cards: start hidden, slide in when submenu is open */
+    #ops-submenu .top-card {
+      opacity: 0;
+      transform: translateX(-14px);
+    }
+    #ops-hub-wrapper:hover #ops-submenu .top-card,
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card {
       opacity: 1;
       transform: translateX(0);
     }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(1),
-    #top-menu-bar:hover .top-card:nth-child(1)  { transition-delay: 0.00s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(2),
-    #top-menu-bar:hover .top-card:nth-child(2)  { transition-delay: 0.03s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(3),
-    #top-menu-bar:hover .top-card:nth-child(3)  { transition-delay: 0.05s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(4),
-    #top-menu-bar:hover .top-card:nth-child(4)  { transition-delay: 0.07s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(5),
-    #top-menu-bar:hover .top-card:nth-child(5)  { transition-delay: 0.09s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(6),
-    #top-menu-bar:hover .top-card:nth-child(6)  { transition-delay: 0.11s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(7),
-    #top-menu-bar:hover .top-card:nth-child(7)  { transition-delay: 0.13s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(8),
-    #top-menu-bar:hover .top-card:nth-child(8)  { transition-delay: 0.15s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(9),
-    #top-menu-bar:hover .top-card:nth-child(9)  { transition-delay: 0.17s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(10),
-    #top-menu-bar:hover .top-card:nth-child(10) { transition-delay: 0.19s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(11),
-    #top-menu-bar:hover .top-card:nth-child(11) { transition-delay: 0.21s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(12),
-    #top-menu-bar:hover .top-card:nth-child(12) { transition-delay: 0.23s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(13),
-    #top-menu-bar:hover .top-card:nth-child(13) { transition-delay: 0.25s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(14),
-    #top-menu-bar:hover .top-card:nth-child(14) { transition-delay: 0.27s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(15),
-    #top-menu-bar:hover .top-card:nth-child(15) { transition-delay: 0.29s; }
-    #nav-launcher:hover ~ #top-menu-bar .top-card:nth-child(n+16),
-    #top-menu-bar:hover .top-card:nth-child(n+16) { transition-delay: 0.31s; }
+    /* Staggered delays for submenu cards */
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(1),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(1)  { transition-delay: 0.00s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(2),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(2)  { transition-delay: 0.03s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(3),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(3)  { transition-delay: 0.05s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(4),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(4)  { transition-delay: 0.07s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(5),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(5)  { transition-delay: 0.09s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(6),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(6)  { transition-delay: 0.11s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(7),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(7)  { transition-delay: 0.13s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(8),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(8)  { transition-delay: 0.15s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(9),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(9)  { transition-delay: 0.17s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(10),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(10) { transition-delay: 0.19s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(11),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(11) { transition-delay: 0.21s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(12),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(12) { transition-delay: 0.23s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(13),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(13) { transition-delay: 0.25s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(14),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(14) { transition-delay: 0.27s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(15),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(15) { transition-delay: 0.29s; }
+    #ops-hub-wrapper:hover #ops-submenu .top-card:nth-child(n+16),
+    #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(n+16) { transition-delay: 0.31s; }
 
     .top-card:hover  { background: #e3f0ff; box-shadow: 0 4px 14px rgba(0,64,128,0.22); transform: translateX(4px); }
     .top-card:active { transform: scale(0.95) translateX(4px); transition-duration: 0.07s; }
     .top-card.active { background: #cfe4ff; box-shadow: 0 4px 10px rgba(0,120,255,0.35); }
+
+    /* Operations Hub card: slightly styled to look like a hub */
+    #ops-hub-card {
+      background: linear-gradient(135deg, #e8f4ff, #deeeff);
+      border: 1.5px solid rgba(0,64,128,0.18);
+    }
+    #ops-hub-card:hover { background: linear-gradient(135deg, #d0e8ff, #c4deff); }
+    #ops-hub-wrapper.ops-open #ops-hub-card,
+    #ops-hub-wrapper:hover #ops-hub-card {
+      background: linear-gradient(135deg, #c8e0ff, #b8d4ff);
+      box-shadow: 0 4px 14px rgba(0,64,128,0.25);
+    }
+    /* Chevron indicator on Ops Hub card */
+    #ops-hub-chevron {
+      margin-left: auto;
+      font-size: 10px;
+      color: #6699cc;
+      transition: transform 0.22s ease;
+      flex-shrink: 0;
+    }
+    #ops-hub-wrapper:hover #ops-hub-chevron,
+    #ops-hub-wrapper.ops-open #ops-hub-chevron { transform: rotate(180deg); }
 
     .top-card svg    { flex-shrink: 0; }
     .top-card span:first-of-type {
@@ -866,6 +890,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      flex: 1;
     }
     .device-list{width:auto;min-width:286px;max-width:calc(286px * 1.40);max-height:100%;border-radius:12px;background:rgba(255,255,255,0.15);padding:0;box-shadow:0 6px 20px rgba(0,170,255,0.2);display:flex;flex-direction:column;overflow:hidden;color:#00faff;font-family:'Consolas','Courier New',monospace;backdrop-filter:blur(8px);}
     .device-list h3{margin:0;padding:1rem;font-size:1.4rem;background:rgba(255,255,255,0.2);border-bottom:1px solid rgba(0,170,255,0.3);position:sticky;top:0;z-index:10;text-align:center;color:#004080;font-weight:bold;}
@@ -1204,32 +1229,31 @@
   body.dragging,
   body.dragging * { cursor: grabbing !important; }
 
-  /* ── JS-toggled open state (mirrors CSS :hover — works for touch/click) ── */
-  #top-menu-bar.nav-open {
-    opacity: 1; pointer-events: auto; transform: translateX(0);
+  /* ── JS-toggled open state for mobile touch ── */
+  #ops-hub-wrapper.ops-open #ops-submenu {
+    visibility: visible; opacity: 1; transform: translateY(0);
+    transition: visibility 0s, opacity 0.22s ease, transform 0.25s cubic-bezier(0.34,1.3,0.64,1);
   }
-  #top-menu-bar.nav-open .top-card {
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card {
     opacity: 1; transform: translateX(0);
   }
-  #top-menu-bar.nav-open .top-card:nth-child(1)    { transition-delay:0.00s; }
-  #top-menu-bar.nav-open .top-card:nth-child(2)    { transition-delay:0.03s; }
-  #top-menu-bar.nav-open .top-card:nth-child(3)    { transition-delay:0.05s; }
-  #top-menu-bar.nav-open .top-card:nth-child(4)    { transition-delay:0.07s; }
-  #top-menu-bar.nav-open .top-card:nth-child(5)    { transition-delay:0.09s; }
-  #top-menu-bar.nav-open .top-card:nth-child(6)    { transition-delay:0.11s; }
-  #top-menu-bar.nav-open .top-card:nth-child(7)    { transition-delay:0.13s; }
-  #top-menu-bar.nav-open .top-card:nth-child(8)    { transition-delay:0.15s; }
-  #top-menu-bar.nav-open .top-card:nth-child(9)    { transition-delay:0.17s; }
-  #top-menu-bar.nav-open .top-card:nth-child(10)   { transition-delay:0.19s; }
-  #top-menu-bar.nav-open .top-card:nth-child(11)   { transition-delay:0.21s; }
-  #top-menu-bar.nav-open .top-card:nth-child(12)   { transition-delay:0.23s; }
-  #top-menu-bar.nav-open .top-card:nth-child(13)   { transition-delay:0.25s; }
-  #top-menu-bar.nav-open .top-card:nth-child(14)   { transition-delay:0.27s; }
-  #top-menu-bar.nav-open .top-card:nth-child(15)   { transition-delay:0.29s; }
-  #top-menu-bar.nav-open .top-card:nth-child(n+16) { transition-delay:0.31s; }
-  /* Hamburger rotates 90° when open */
-  #nav-launcher svg     { transition: transform 0.22s ease; }
-  #nav-launcher.nav-open svg { transform: rotate(90deg); }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(1)    { transition-delay:0.00s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(2)    { transition-delay:0.03s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(3)    { transition-delay:0.05s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(4)    { transition-delay:0.07s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(5)    { transition-delay:0.09s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(6)    { transition-delay:0.11s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(7)    { transition-delay:0.13s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(8)    { transition-delay:0.15s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(9)    { transition-delay:0.17s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(10)   { transition-delay:0.19s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(11)   { transition-delay:0.21s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(12)   { transition-delay:0.23s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(13)   { transition-delay:0.25s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(14)   { transition-delay:0.27s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(15)   { transition-delay:0.29s; }
+  #ops-hub-wrapper.ops-open #ops-submenu .top-card:nth-child(n+16) { transition-delay:0.31s; }
+  /* Hamburger rotate not needed, chevron handles indicator */
 
   /* ── Device details popup — smooth slide-in ── */
   #device-details {
