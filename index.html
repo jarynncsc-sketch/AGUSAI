@@ -2409,32 +2409,11 @@ function updateDeviceList(devices) {
           localStorage.setItem('reservoirAutoShutoff', JSON.stringify(reservoirAutoShutoffState));
         }
         localStorage.setItem('desired_' + d.device, ns);
-        // Attach last-known coordinates so the backend row is never blank.
-        // Priority: (1) d.latitude/d.longitude from the current device object in this closure,
-        //           (2) deviceCoordinatesCache as fallback,
-        //           (3) last row of the device's sheet data (async fetch).
-        var _coords = deviceCoordinatesCache[d.device] || {};
-        var _lat = d.latitude || _coords.latitude || '';
-        var _lng = d.longitude || _coords.longitude || '';
-        var _device = d.device, _ns = ns;
-        function _pushAndProcess(lat, lng) {
-          // Update the cache for future toggles
-          if (lat && lng) deviceCoordinatesCache[_device] = { latitude: lat, longitude: lng };
-          OfflineQueue.push({ device: _device, state: _ns, latitude: lat, longitude: lng });
-          localStorage.setItem('OfflineQueue', JSON.stringify(OfflineQueue));
-          processOfflineQueue(); // send immediately, don't wait for the 15-second interval
-        }
-        if (_lat && _lng) {
-          // Coords resolved immediately — push & fire right away
-          _pushAndProcess(_lat, _lng);
-          updateDeviceList(devices);
-        } else {
-          // No coords in cache or device object — copy from the last sheet row
-          updateDeviceList(devices); // update UI immediately while fetch runs
-          fetchLastKnownCoords(_device).then(function(fc) {
-            _pushAndProcess(fc.latitude, fc.longitude);
-          });
-        }
+        // Copy lat/lng directly from the device object at toggle time
+        OfflineQueue.push({ device: d.device, state: ns, latitude: d.latitude || '', longitude: d.longitude || '' });
+        localStorage.setItem('OfflineQueue', JSON.stringify(OfflineQueue));
+        processOfflineQueue();
+        updateDeviceList(devices);
       });
       li.addEventListener('click', function(e){ if (e.target.tagName.toLowerCase() !== 'input') selectDevice(d.device); });
       // ─── Pumping Station audio alarm ──────────────────────────────────
