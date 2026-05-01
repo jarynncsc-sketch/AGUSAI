@@ -12,6 +12,7 @@
   body.dark-mode img, body.dark-mode canvas, body.dark-mode video, body.dark-mode .ol-viewport { filter: invert(1) hue-rotate(180deg); }
   body.dark-mode #bg-canvas { filter: invert(1) hue-rotate(180deg) brightness(0.7); }
   body.dark-mode .top-card { background:#1e293b!important; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   body.dark-mode #dark-mode-btn span { color:#facc15!important; }
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@7.5.0/ol.css" />
@@ -1542,7 +1543,7 @@ function toggleFilter(type){
   if(btn){ btn.classList.toggle('active', activeFilters.has(type)); }
   updateDashboard();
 }
-var API_URL = 'https://script.google.com/macros/s/AKfycbxQf0PRP2X9ZyZfl4dJuUIz9naMkm7o-jZcN5NfNK3BxyeO532p8rBUyVV1_O_CtToiKQ/exec';
+var API_URL = 'https://script.google.com/macros/s/AKfycbwaASrDinkCa1e3x37MtsTPJd5xmbj_FCpokwq6P9aZLogSJEj296FOZB02tilZAnv15g/exec';
 
 function apiGet(action, params) {
   var url = API_URL + '?action=' + encodeURIComponent(action);
@@ -1557,7 +1558,9 @@ function apiPost(action, data) {
 
 var userToken = null, loggedInUser = '', selectedDevice = null;
 var deviceMarkers = {}, myChart = null, blinkOn = true;
-var OfflineQueue = JSON.parse(localStorage.getItem('OfflineQueue') || '[]');
+// ★ v3: Dashboard-as-Command-Authority — no OfflineQueue needed.
+//        commandedRelayCache mirrors server PropertiesService for optimistic UI.
+var commandedRelayCache = {}; // { deviceName: 0|1 }
 var allGraphData = [], currentDevice = '', activeRange = 14;
 var today = new Date();
 var today = new Date();
@@ -2231,7 +2234,10 @@ if (!isNaN(llvl)) {
             'Current: '  + (d.current  || 0) + ' A<br>' +
             'Power: '    + (d.power    || 0) + ' W<br>' +
             'Energy: '   + (d.energy   || 0) + ' kWh<br>' +
-            'Relay: '    + (d.relay ? 'ON' : 'OFF') + '<br>' +
+            // ★ v3: show commanded (dashboard) vs actual (Smart Device)
+            'Relay: <b style="color:'+(d.commandedRelay?'#22c55e':'#ef4444')+';">'+(d.commandedRelay?'● ON':'● OFF')+'</b>'
+              +(d.relayPending?' <span style="font-size:10px;color:#d97706;">⏳ Smart Device confirming…</span>':' <span style="font-size:10px;color:#94a3b8;">✓ Confirmed</span>')+'<br>'
+            +'Smart Device actual: <span style="color:#94a3b8;font-size:11px;">'+(d.relay?'ON':'OFF')+'</span><br>' +
             _effBadge + '<br>' +
             '<button onclick="showHistoricalGraph(\'' + escapeForAttr(d.device) + '\',\'pump\')" style="margin-top:7px;width:100%;padding:5px 0;background:#004080;color:white;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;">📊 View Graph</button>' +
           '</div>' +
@@ -2299,22 +2305,42 @@ if (effectiveType!=='reservoir' && effectiveType!=='pressure' && !activeFilters.
   });
 }
 
-function processOfflineQueue() {
-  if (!userToken || !OfflineQueue.length) return;
-  OfflineQueue.slice().forEach(function(q, i) {
-    // Re-look-up coords in case they arrived after the command was queued
-    var coords = deviceCoordinatesCache[q.device] || {};
-    var lat  = q.latitude  || coords.latitude  || '';
-    var lng  = q.longitude || coords.longitude || '';
-    apiPost('togglePump', { device: q.device, state: q.state, token: userToken, latitude: lat, longitude: lng }).then(function(res) {
-      if (res && res.success) {
-        localStorage.setItem('confirmed_' + q.device, q.state);
-        localStorage.removeItem('desired_' + q.device);
-        OfflineQueue.splice(i, 1);
-        localStorage.setItem('OfflineQueue', JSON.stringify(OfflineQueue));
-        updateDashboard();
-      }
-    }).catch(function(e) { console.error('togglePump error:', e); });
+// ★ v3: processOfflineQueue kept as no-op for legacy references.
+function processOfflineQueue() { /* no-op in v3 */ }
+
+/**
+ * ★ v3 togglePump — dashboard is the command authority.
+ * Optimistically updates UI, sends command to GAS (which stores in PropertiesService),
+ * then schedules a refresh to sync relayPending status.
+ */
+function dashboardTogglePump(deviceName, newStateInt, cb) {
+  if (!userToken) { showNotification('⚠ Not logged in', 'warning'); return; }
+  commandedRelayCache[deviceName] = newStateInt;
+  if (cb) cb(newStateInt);
+
+  var coords = deviceCoordinatesCache[deviceName] || {};
+  apiPost('togglePump', {
+    device:    deviceName,
+    token:     userToken,
+    latitude:  coords.latitude  || '',
+    longitude: coords.longitude || ''
+  }).then(function(res) {
+    if (res && res.success) {
+      commandedRelayCache[deviceName] = res.newState;
+      if (cb) cb(res.newState);
+      showNotification('✅ ' + deviceName + ' → ' + (res.newState ? 'ON' : 'OFF') + ' (by ' + (res.toggledBy || 'you') + ')', 'success');
+      setTimeout(updateDashboard, 1500);
+    } else {
+      var revert = newStateInt === 1 ? 0 : 1;
+      commandedRelayCache[deviceName] = revert;
+      if (cb) cb(revert);
+      showNotification('❌ Toggle failed: ' + (res && res.error ? res.error : 'Server error'), 'error');
+    }
+  }).catch(function(e) {
+    var revert = newStateInt === 1 ? 0 : 1;
+    commandedRelayCache[deviceName] = revert;
+    if (cb) cb(revert);
+    showNotification('❌ Toggle failed — check connection', 'error');
   });
 }
 
@@ -2346,12 +2372,13 @@ function updateDeviceList(devices) {
       li.innerHTML = '<span>'+d.device+'</span><div class="device-status">'+fi+'<span class="status-indicator '+sc+' '+fb+'"></span><span class="pressure-value '+pc+' '+bc+'">'+pv+'</span></div>';
       li.addEventListener('click', function(){selectDevice(d.device);});
     } else {
-      var serverRelay = d.relay;
-      var serverRelayOn = serverRelay == 1 || serverRelay === true || serverRelay === '1' || (typeof serverRelay === 'string' && serverRelay.toUpperCase() === 'ON');
-      var confirmedState = localStorage.getItem('confirmed_' + d.device);
-      var desiredState = localStorage.getItem('desired_' + d.device);
-      if (!desiredState) { var newConfirmed = serverRelayOn ? 'ON' : 'OFF'; if (confirmedState !== newConfirmed) { localStorage.setItem('confirmed_' + d.device, newConfirmed); confirmedState = newConfirmed; } }
-      var displayState = desiredState || confirmedState;
+      // ★ v3: commandedRelay = what dashboard ordered (PropertiesService source of truth)
+      //        relay = what Smart Device actually has (sheet)
+      //        relayPending = they differ (waiting for Smart Device to confirm)
+      if (d.commandedRelay !== undefined) commandedRelayCache[d.device] = d.commandedRelay;
+      var commanded  = commandedRelayCache.hasOwnProperty(d.device) ? commandedRelayCache[d.device] : (d.commandedRelay != null ? d.commandedRelay : (d.relay || 0));
+      var switchIsOn = commanded === 1 || commanded === true;
+      var relayPending = d.relayPending === true;
       // ── Check if auto-shut-off due to reservoir full ───────
       var autoOff = null;
       Object.keys(reservoirAutoShutoffState).forEach(function(k) {
@@ -2360,43 +2387,45 @@ function updateDeviceList(devices) {
       var autoOffBadge = autoOff
         ? '<div class="auto-shutoff-badge" title="Auto-shutoff: ' + (autoOff.reservoir||'') + ' hit shutoff level ' + (autoOff.shutoffLevel||'') + ' m³ at ' + (autoOff.timestamp||'') + '">🛑 AUTO-OFF · '+(autoOff.reservoir||'Reservoir')+'</div>'
         : '';
-      li.innerHTML = '<span>'+d.device+'</span><div class="device-status">'+fi+'<span class="status-indicator '+sc+' '+fb+'"></span><label class="toggle-switch" title="'+(autoOff?'Auto-shutoff active — reservoir is full':'Toggle pump ON/OFF')+'"><input type="checkbox"'+(displayState==='ON'?' checked':'')+'><span class="slider"></span></label></div>'+autoOffBadge;
+      // ★ v3: build switch — state from commandedRelay (server authority)
+      var pendingBadge = relayPending
+        ? '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#d97706;font-weight:700;margin-top:2px;"><span style="width:8px;height:8px;border-radius:50%;border:2px solid #d97706;border-top-color:transparent;display:inline-block;animation:spin 0.8s linear infinite;"></span>Sending…</div>'
+        : '';
+      li.innerHTML = '<span>'+d.device+'</span>'
+        + '<div class="device-status">'+fi+'<span class="status-indicator '+sc+' '+fb+'"></span>'
+        + '<label class="toggle-switch" title="'+(autoOff?'Auto-shutoff active — reservoir is full':'Toggle pump ON/OFF')+'">'
+        + '<input type="checkbox"'+(switchIsOn?' checked':'')+' data-device="'+escapeForAttr(d.device)+'">'
+        + '<span class="slider"></span></label></div>'
+        + pendingBadge + autoOffBadge;
       var cb = li.querySelector('input[type="checkbox"]');
-      cb.addEventListener('change', function(){
-        var ns = cb.checked ? 'ON' : 'OFF';
+      cb.addEventListener('change', function() {
+        var newStateInt = cb.checked ? 1 : 0;
         // ── Guard: if trying to turn ON while reservoir is full ──
-        if (ns === 'ON' && autoOff) {
-          cb.checked = false; // revert
+        if (newStateInt === 1 && autoOff) {
+          cb.checked = false;
           showNotification('⚠ Cannot turn ON ' + d.device + ': ' + (autoOff.reservoir||'Reservoir') + ' is still above resume level (' + (autoOff.resumeLevel||'--') + ' m³). Drain first or remove the link.', 'warning');
           return;
         }
-        // ── Guard: reservoir status warning when turning ON ──────
+        // ── Guard: reservoir near-full warning ──
         var linkedFull = null;
-        if (ns === 'ON') {
+        if (newStateInt === 1) {
           Object.keys(reservoirThresholdsCache).forEach(function(rk) {
             var rt = reservoirThresholdsCache[rk];
-            var rd = devices.find(function(x) { return x.device === rk; });
-            if (rd) {
-              var rlv = parseFloat(rd.level);
-              if (!isNaN(rlv) && rlv >= rt.maxLevel * 0.95 && !linkedFull) linkedFull = { name: rk, level: rlv, max: rt.maxLevel };
-            }
+            var rd = devices.find(function(x){ return x.device === rk; });
+            if (rd) { var rlv=parseFloat(rd.level); if (!isNaN(rlv)&&rlv>=rt.maxLevel*0.95&&!linkedFull) linkedFull={name:rk,level:rlv,max:rt.maxLevel}; }
           });
-          if (linkedFull && !confirm('⚠ Warning: ' + linkedFull.name + ' is at ' + linkedFull.level.toFixed(0) + ' m³ (' + Math.round(linkedFull.level/linkedFull.max*100) + '% full — near max: ' + linkedFull.max + ' m³).\n\nTurning ON this pump may overflow the reservoir.\n\nProceed anyway?')) {
-            cb.checked = false; return;
+          if (linkedFull && !confirm('⚠ Warning: '+linkedFull.name+' is at '+linkedFull.level.toFixed(0)+' m³ ('+Math.round(linkedFull.level/linkedFull.max*100)+'% full — near max: '+linkedFull.max+' m³).\n\nTurning ON this pump may overflow the reservoir.\n\nProceed anyway?')) {
+            cb.checked = !cb.checked; return;
           }
         }
-        // If manually turned ON, clear any prior auto-shutoff record for this device
-        if (ns === 'ON') {
+        if (newStateInt === 1) {
           Object.keys(reservoirAutoShutoffState).forEach(function(k) {
             if (reservoirAutoShutoffState[k].pump === d.device) delete reservoirAutoShutoffState[k];
           });
           localStorage.setItem('reservoirAutoShutoff', JSON.stringify(reservoirAutoShutoffState));
         }
-        localStorage.setItem('desired_' + d.device, ns);
-        OfflineQueue.push({ device: d.device, state: ns, latitude: d.latitude || '', longitude: d.longitude || '' });
-        localStorage.setItem('OfflineQueue', JSON.stringify(OfflineQueue));
-        processOfflineQueue();
-        updateDeviceList(devices);
+        // ★ v3: direct command — no queue
+        dashboardTogglePump(d.device, newStateInt, function(confirmed) { cb.checked = confirmed === 1; });
       });
       li.addEventListener('click', function(e){ if (e.target.tagName.toLowerCase() !== 'input') selectDevice(d.device); });
       // ─── Pumping Station audio alarm ──────────────────────────────────
@@ -2487,15 +2516,7 @@ function autoShutoffPumps(devices) {
 
       _addAutoShutoffLog({ pump: cfg.pump, reservoir: cfg.reservoir, level: lv, shutoffLevel: shutoff, action: 'AUTO-OFF', timestamp: ts });
 
-      if (userToken) {
-        apiPost('togglePump', { device: cfg.pump, token: userToken, reason: 'AUTO_RESERVOIR_FULL', latitude: '', longitude: '' })
-          .then(function(r) { if (r && r.success) updateDashboard(); })
-          .catch(function(e) { console.warn('[AutoControl] togglePump failed:', e); });
-      } else {
-        localStorage.setItem('desired_' + cfg.pump, 'OFF');
-        OfflineQueue.push({ device: cfg.pump, state: 'OFF', latitude: '', longitude: '' });
-        localStorage.setItem('OfflineQueue', JSON.stringify(OfflineQueue));
-      }
+      dashboardTogglePump(cfg.pump, 0, null); // ★ v3 auto-shutoff
 
     // ── Trigger AUTO-RESUME (turn pump back ON) ──────────────────────────
     } else if (lv <= resume && autoOffEntry) {
@@ -2509,27 +2530,8 @@ function autoShutoffPumps(devices) {
         delete reservoirAutoShutoffState[cfg.pump + ':' + cfg.reservoir];
         localStorage.setItem('reservoirAutoShutoff', JSON.stringify(reservoirAutoShutoffState));
 
-        // ── 2. Update local desired/confirmed state to ON ────────────────
-        localStorage.setItem('desired_'   + cfg.pump, 'ON');
-        localStorage.setItem('confirmed_' + cfg.pump, 'ON');
-
-        // ── 3. Send toggle-ON command to server ──────────────────────────
-        if (userToken) {
-          apiPost('togglePump', {
-            device: cfg.pump, token: userToken,
-            reason: 'AUTO_RESERVOIR_RESUME',
-            latitude:  '',
-            longitude: ''
-          }).then(function(r) {
-            if (r && r.success) {
-              localStorage.removeItem('desired_' + cfg.pump);
-              updateDashboard();
-            }
-          }).catch(function(e) { console.warn('[AutoResume] togglePump ON failed:', e); });
-        } else {
-          OfflineQueue.push({ device: cfg.pump, state: 'ON', latitude: '', longitude: '' });
-          localStorage.setItem('OfflineQueue', JSON.stringify(OfflineQueue));
-        }
+        // ── 2. Send toggle-ON command to server (★ v3 direct command) ──
+        dashboardTogglePump(cfg.pump, 1, null);
 
         // ── 4. Notify & log ──────────────────────────────────────────────
         showNotification('✅ AUTO-RESUME: ' + cfg.pump + ' turned back ON — ' + cfg.reservoir + ' dropped to ' + lv.toFixed(0) + ' m³ (resume level: ' + resume + ' m³)', 'success');
