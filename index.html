@@ -4,6 +4,179 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AGUS – AI‑Enhanced Pump Station Dashboard</title>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       SECURITY SHIELD — Source Protection & Anti-Inspection Layer
+       ═══════════════════════════════════════════════════════════════ -->
+  <script>
+  (function() {
+    'use strict';
+
+    /* ── 1. Disable Right-Click Context Menu ── */
+    document.addEventListener('contextmenu', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }, true);
+
+    /* ── 2. Block Keyboard Shortcuts ── */
+    document.addEventListener('keydown', function(e) {
+      var key = e.key || e.keyCode;
+      var ctrl = e.ctrlKey || e.metaKey;
+      var shift = e.shiftKey;
+
+      // F12 — DevTools
+      if (key === 'F12' || e.keyCode === 123) { e.preventDefault(); return false; }
+
+      // Ctrl+Shift+I — DevTools (Inspector)
+      if (ctrl && shift && (key === 'I' || key === 'i' || e.keyCode === 73)) { e.preventDefault(); return false; }
+
+      // Ctrl+Shift+J — DevTools (Console)
+      if (ctrl && shift && (key === 'J' || key === 'j' || e.keyCode === 74)) { e.preventDefault(); return false; }
+
+      // Ctrl+Shift+C — DevTools (Element picker)
+      if (ctrl && shift && (key === 'C' || key === 'c' || e.keyCode === 67)) { e.preventDefault(); return false; }
+
+      // Ctrl+U — View Page Source
+      if (ctrl && (key === 'U' || key === 'u' || e.keyCode === 85)) { e.preventDefault(); return false; }
+
+      // Ctrl+S — Save Page
+      if (ctrl && (key === 'S' || key === 's' || e.keyCode === 83)) { e.preventDefault(); return false; }
+
+      // Ctrl+A — Select All
+      if (ctrl && (key === 'A' || key === 'a' || e.keyCode === 65)) { e.preventDefault(); return false; }
+
+      // Ctrl+C — Copy
+      if (ctrl && (key === 'C' || key === 'c' || e.keyCode === 67) && !shift) { e.preventDefault(); return false; }
+
+      // Ctrl+P — Print
+      if (ctrl && (key === 'P' || key === 'p' || e.keyCode === 80)) { e.preventDefault(); return false; }
+    }, true);
+
+    /* ── 3. DevTools Detection via window size delta ── */
+    var _devToolsOpen = false;
+    var _devToolsOverlay = null;
+
+    function _createDevToolsOverlay() {
+      if (_devToolsOverlay) return;
+      _devToolsOverlay = document.createElement('div');
+      _devToolsOverlay.id = '__sec_overlay__';
+      _devToolsOverlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:2147483647',
+        'background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)',
+        'display:flex', 'flex-direction:column',
+        'align-items:center', 'justify-content:center',
+        'cursor:default', 'user-select:none', '-webkit-user-select:none'
+      ].join(';');
+      _devToolsOverlay.innerHTML =
+        '<div style="text-align:center;color:#fff;font-family:sans-serif;padding:40px;">' +
+        '<div style="font-size:64px;margin-bottom:20px;">🔒</div>' +
+        '<div style="font-size:26px;font-weight:800;margin-bottom:12px;color:#60a5fa;">Access Restricted</div>' +
+        '<div style="font-size:15px;color:rgba(255,255,255,0.7);max-width:340px;line-height:1.6;">' +
+        'Developer Tools are not permitted on this application.<br>Please close DevTools to continue.' +
+        '</div>' +
+        '<div style="margin-top:28px;font-size:12px;color:rgba(255,255,255,0.35);">AGUS Security Shield Active</div>' +
+        '</div>';
+      document.body.appendChild(_devToolsOverlay);
+    }
+
+    function _removeDevToolsOverlay() {
+      if (_devToolsOverlay && _devToolsOverlay.parentNode) {
+        _devToolsOverlay.parentNode.removeChild(_devToolsOverlay);
+        _devToolsOverlay = null;
+      }
+    }
+
+    var _checkDevTools = (function() {
+      var _threshold = 160;
+      return function() {
+        var widthDiff  = window.outerWidth  - window.innerWidth;
+        var heightDiff = window.outerHeight - window.innerHeight;
+        var isOpen = widthDiff > _threshold || heightDiff > _threshold;
+        if (isOpen && !_devToolsOpen) {
+          _devToolsOpen = true;
+          _createDevToolsOverlay();
+        } else if (!isOpen && _devToolsOpen) {
+          _devToolsOpen = false;
+          _removeDevToolsOverlay();
+        }
+      };
+    })();
+
+    // Poll every 1 second
+    setInterval(_checkDevTools, 1000);
+    window.addEventListener('resize', _checkDevTools);
+
+    /* ── 4. Console Trap — clears and warns if console is opened ── */
+    var _consoleTrap = function() {};
+    _consoleTrap.toString = function() {
+      console.clear();
+      console.log('%c⛔ AGUS Security Warning', 'color:#ef4444;font-size:20px;font-weight:900;');
+      console.log('%cUnauthorized access to this console is prohibited.\nAll activity is monitored and logged.',
+        'color:#f97316;font-size:13px;');
+      return '⛔ Restricted';
+    };
+    setInterval(function() {
+      console.log(_consoleTrap);
+      console.clear();
+    }, 2000);
+
+    /* ── 5. Disable Text Selection ── */
+    document.addEventListener('selectstart', function(e) {
+      // Allow in inputs and textareas
+      var tag = (e.target.tagName || '').toUpperCase();
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+      e.preventDefault();
+      return false;
+    }, true);
+
+    /* ── 6. Disable Drag ── */
+    document.addEventListener('dragstart', function(e) {
+      e.preventDefault();
+      return false;
+    }, true);
+
+    /* ── 7. Block view-source:// navigation ── */
+    window.addEventListener('beforeunload', function(e) {
+      if (document.location.href.indexOf('view-source:') !== -1) {
+        e.preventDefault();
+      }
+    });
+
+    /* ── 8. Disable Print via media ── */
+    window.addEventListener('beforeprint', function(e) {
+      e.preventDefault ? e.preventDefault() : (e.returnValue = false);
+    });
+
+  })();
+  </script>
+
+  <style>
+    /* ── Security CSS: Disable selection and drag globally ── */
+    * {
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+      user-select: none !important;
+    }
+    /* Re-enable for inputs/textareas/contenteditable ── */
+    input, textarea, [contenteditable="true"] {
+      -webkit-user-select: text !important;
+      -moz-user-select: text !important;
+      -ms-user-select: text !important;
+      user-select: text !important;
+    }
+    /* Disable image/element drag ── */
+    img, a, button {
+      -webkit-user-drag: none !important;
+      user-drag: none !important;
+    }
+    /* Disable print ── */
+    @media print {
+      body { display: none !important; }
+    }
+  </style>
+  <!-- ═══ END SECURITY SHIELD ═══ -->
   <link rel="manifest" href="data:application/json,%7B%22name%22%3A%22AGUS%22%2C%22short_name%22%3A%22AGUS%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23ffffff%22%2C%22theme_color%22%3A%22%23004080%22%7D">
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
